@@ -3,7 +3,7 @@ import numpy as np
 
 import torch as tc
 import torch.nn as nn
-import torch.tensor as T
+from torch import Tensor as T
 
 from .util import *
 
