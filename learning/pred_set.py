@@ -28,7 +28,7 @@ def log_factorial(n):
 def log_n_choose_k(n, k):
     if k == 0:
         #return tc.tensor(1)
-        return 1
+        return 0
     else:
         #res = log_factorial(n) - log_factorial(k) - log_factorial(n-k)
         #res = tc.arange(n, n-k, -1).float().log().sum() - log_factorial(k)
