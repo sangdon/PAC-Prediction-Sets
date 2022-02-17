@@ -1,6 +1,6 @@
 # PAC Prediction Sets
 
-## Demo Example
+## MNIST Demo
 ```
 python3 main_cls_mnist.py --exp_name exp_mnist
 ```
