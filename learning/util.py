@@ -1,5 +1,7 @@
 import sys, os
 import numpy as np
+from scipy import stats
+import math
 
 import torch as tc
 
@@ -215,10 +217,11 @@ def compute_ece(mdl, ld, device):
     y_list, yh_list, ph_list = [], [], []
     mdl = mdl.to(device)
     for x, y in ld:
-        x, y = x.to(device), y.to(device)
+        x, y = to_device(x, device), to_device(y, device)
         with tc.no_grad():
             out = mdl(x)
-        ph, yh = out['ph_top'], out['yh_top']
+        ph = out['ph_cal'] if 'ph_cal' in out else out['ph_top']
+        yh = out['yh_cal'] if 'yh_cal' in out else out['yh_top']
         y_list.append(y.cpu())
         yh_list.append(yh.cpu())
         ph_list.append(ph.cpu())
@@ -227,6 +230,19 @@ def compute_ece(mdl, ld, device):
     return ece
 
 
+def compute_error_per_label(ld, mdl, loss_fn, device):
+    loss_vec, y_vec = [], []
+    with tc.no_grad():
+        for x, y in ld:
+            loss_dict = loss_fn(x, y, mdl, reduction='none', device=device)
+            loss_vec.append(loss_dict['loss'])
+            y_vec.append(y)
+    loss_vec, y_vec = tc.cat(loss_vec), tc.cat(y_vec)
+    error_label = []
+    for y in set(y_vec.tolist()):
+        error_label.append(loss_vec[y_vec==y].mean().item())
+    return error_label
+        
 
 def to_device(x, device):
     if tc.is_tensor(x):
@@ -240,3 +256,18 @@ def to_device(x, device):
     else:
         raise NotImplementedError
     return x
+
+
+# def bci_clopper_pearson(k, n, alpha):
+#     lo = stats.beta.ppf(alpha/2, k, n-k+1)
+#     hi = stats.beta.ppf(1 - alpha/2, k+1, n-k)
+#     lo = 0.0 if math.isnan(lo) else lo
+#     hi = 1.0 if math.isnan(hi) else hi
+    
+#     return lo, hi
+
+# def estimate_bin_density(k, n, alpha):
+#     lo, hi = bci_clopper_pearson(k, n, alpha)
+#     return lo, hi
+
+    

@@ -14,33 +14,62 @@ class BaseLearner:
         self.loss_fn_val = None
         self.loss_fn_test = None
         if params:
-            self.mdl_fn_best = os.path.join(params.snapshot_root, params.exp_name, 'model_params%s_best'%('_'+name_postfix if name_postfix else '')) 
-            self.mdl_fn_final = os.path.join(params.snapshot_root, params.exp_name, 'model_params%s_final'%('_'+name_postfix if name_postfix else ''))
-        self.mdl.to(self.params.device)
+            self.mdl_fn_best = os.path.join(params.snapshot_root, params.exp_name, 'model_params%s_best') 
+            self.mdl_fn_final = os.path.join(params.snapshot_root, params.exp_name, 'model_params%s_final')
+            self.mdl_fn_chkp = os.path.join(params.snapshot_root, params.exp_name, 'model_params%s_chkp')
+
+            self.mdl.to(self.params.device)
 
 
 
     def _load_model(self, best=True):
-        model_fn = self.mdl_fn_best if best else self.mdl_fn_final
+        if best:
+            model_fn = self.mdl_fn_best%('_'+self.name_postfix if self.name_postfix else '')
+        else:
+            model_fn = self.mdl_fn_final%('_'+self.name_postfix if self.name_postfix else '')
+        print(f'[{"best" if best else "final" } model is loaded] {model_fn}')
         self.mdl.load_state_dict(tc.load(model_fn))
         return model_fn
 
         
     def _save_model(self, best=True):
-        model_fn = self.mdl_fn_best if best else self.mdl_fn_final
+        if best:
+            model_fn = self.mdl_fn_best%('_'+self.name_postfix if self.name_postfix else '')
+        else:
+            model_fn = self.mdl_fn_final%('_'+self.name_postfix if self.name_postfix else '')
         os.makedirs(os.path.dirname(model_fn), exist_ok=True)
         tc.save(self.mdl.state_dict(), model_fn)
         return model_fn
 
     
     def _check_model(self, best=True):
-        model_fn = self.mdl_fn_best if best else self.mdl_fn_final
+        if best:
+            model_fn = self.mdl_fn_best%('_'+self.name_postfix if self.name_postfix else '')
+        else:
+            model_fn = self.mdl_fn_final%('_'+self.name_postfix if self.name_postfix else '')
         return os.path.exists(model_fn)
-    
         
-    def train(self, ld_tr, ld_val, ld_test=None):
+    
+    def _save_chkp(self):
+        model_fn = self.mdl_fn_chkp%('_'+self.name_postfix if self.name_postfix else '')
+        chkp = {
+            'epoch': self.i_epoch,
+            'mdl_state': self.mdl.state_dict(),
+            'opt_state': self.opt.state_dict(),
+            'sch_state': self.scheduler.state_dict(),
+            'error_val_best': self.error_val_best,
+        }
+        tc.save(chkp, model_fn)
+        return model_fn
+
+
+    def _load_chkp(self, chkp_fn):
+        return tc.load(chkp_fn, map_location=tc.device('cpu'))
+
+    
+    def train(self, ld_tr, ld_val=None, ld_test=None):
         ## load a model
-        if not self.params.rerun and self._check_model(best=False):
+        if not self.params.rerun and not self.params.resume and self._check_model(best=False):
             if self.params.load_final:
                 self._load_model(best=False)
             else:
@@ -48,7 +77,8 @@ class BaseLearner:
             return
         
         self._train_begin(ld_tr, ld_val, ld_test)
-        for i_epoch in range(1, self.params.n_epochs+1):
+        for i_epoch in range(self.epoch_init, self.params.n_epochs+1):
+            self.i_epoch = i_epoch
             self._train_epoch_begin(i_epoch)
             self._train_epoch(i_epoch, ld_tr)
             self._train_epoch_end(i_epoch, ld_val, ld_test)
@@ -88,13 +118,28 @@ class BaseLearner:
         ## init a lr scheduler
         self.scheduler = optim.lr_scheduler.StepLR(
             self.opt, self.params.lr_decay_epoch, self.params.lr_decay_rate)    
-        
-        ## measure the initial model validation loss
-        if ld_val:
-            self.error_val_best, *_ = self.validate(ld_val)
+
+        ## resume training
+        if self.params.resume:
+            chkp = self._load_chkp(self.params.resume)
+            self.epoch_init = chkp['epoch'] + 1
+            self.opt.load_state_dict(chkp['opt_state'])
+            self.scheduler.load_state_dict(chkp['sch_state'])
+            self.mdl.load_state_dict(chkp['mdl_state'])
+            self.error_val_best = chkp['error_val_best']
+            self.mdl.to(self.params.device)
+            print(f'## resume training from {self.params.resume}: epoch={self.epoch_init} ')
         else:
-            self.error_val_best = np.inf
-        self._save_model(best=True)
+            ## init the epoch_init
+            self.epoch_init = 1
+        
+            ## measure the initial model validation loss
+            if ld_val:
+                self.error_val_best, *_ = self.validate(ld_val)
+            else:
+                self.error_val_best = np.inf
+
+            self._save_model(best=True)
         
     
     def _train_end(self, ld_val, ld_test):
@@ -109,7 +154,8 @@ class BaseLearner:
             print("## load the best model from %s"%(fn))
 
         ## print training time
-        print("## training time: %f sec."%(time.time() - self.time_train_begin))
+        if hasattr(self, 'time_train_begin'):
+            print("## training time: %f sec."%(time.time() - self.time_train_begin))
         
     
     def _train_epoch_begin(self, i_epoch):
@@ -136,12 +182,8 @@ class BaseLearner:
 
 
     def _train_epoch_end(self, i_epoch, ld_val, ld_test):
-        
-        ## print the current status
-        msg = '[%d/%d epoch, lr=%.2e, %.2f sec.] '%(
-            i_epoch, self.params.n_epochs, 
-            self.opt.param_groups[0]['lr'], time.time()-self.time_epoch_begin, 
-        )
+
+        msg = ''
         
         ## print loss
         for k, v in self.loss_dict.items():
@@ -163,6 +205,17 @@ class BaseLearner:
         elif ld_val is None:
             self._save_model(best=False)
             msg += 'saved'
+
+        ## print the current status
+        msg = '[%d/%d epoch, lr=%.2e, %.2f sec.] '%(
+            i_epoch, self.params.n_epochs, 
+            self.opt.param_groups[0]['lr'],
+            time.time()-self.time_epoch_begin,
+        ) + msg
+        
         print(msg)
+
+        ## save checkpoint
+        self._save_chkp()
                 
     

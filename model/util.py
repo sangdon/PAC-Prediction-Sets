@@ -3,16 +3,40 @@ import numpy as np
 
 import torch as tc
 import torch.nn as nn
+import torchvision.transforms.functional as TF
 
 class Dummy(nn.Module):
-    def __init__(self):
-        super().__init__()
-
 
     def forward(self, x, y=None):
         if y is not None:
             x['logph'] = x['logph_y'] ##TODO: better way?
         return x
+
+class NoCal(nn.Module):
+    def __init__(self, mdl, cal_target=-1):
+        super().__init__()
+        self.mdl = mdl
+        self.cal_target = nn.Parameter(tc.tensor(cal_target).long(), requires_grad=False)
+
+        
+    def forward(self, x, training=False):
+        assert(training==False)
+        self.eval() ##always
+
+        ## forward along the base model
+        out = self.mdl(x)
+        if self.cal_target == -1:
+            ph = out['ph_top']
+        elif self.cal_target in range(out['ph'].shape[1]):
+            ph = out['ph'][:, self.cal_target]
+        else:
+            raise NotImplementedError
+        
+        ## return
+        return {'yh_top': out['yh_top'],
+                'yh_cal': out['yh_top'] if self.cal_target == -1 else tc.ones_like(out['yh_top'])*self.cal_target,
+                'ph_cal': ph,
+        }
 
 
 def dist_mah(xs, cs, Ms, sqrt=True):
@@ -46,3 +70,37 @@ def neg_log_prob(yhs, yhs_logvar, ys, var_min=1e-16):
 
     return loss
 
+# def g(grad):
+#     print('grad_prev:', grad)
+#     grad = -grad
+#     print('grad_post:', grad)
+
+#     return grad
+
+class GradReversalLayer(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        
+    def forward(self, x, training=False):
+        x = x * 1.0
+        if training:
+            if x.requires_grad:
+                x.register_hook(lambda grad: -grad)
+                #x.register_hook(g)
+        return x
+
+    
+class ExampleNormalizer(nn.Module):
+    def __init__(self, mdl, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]): ## imagenet mean and std
+        super().__init__()
+        self.mdl = mdl
+        self.mean = mean
+        self.std = std
+
+        
+    def forward(self, x, **kwargs):
+        x = TF.normalize(tensor=x, mean=self.mean, std=self.std)
+        x = self.mdl(x, **kwargs)
+        return x
+    

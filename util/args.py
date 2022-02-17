@@ -21,3 +21,14 @@ def print_args(params, param_str="args", n_tap_str=1):
         else:
             print("\t"*n_tap_str + key + ":", val)
     print()
+
+
+def propagate_args(args, name):
+    for k, v in args.__dict__.items():
+        if isinstance(v, argparse.Namespace):
+            a = getattr(args, k)
+            setattr(a, name, getattr(args, name))
+            setattr(args, k, a)
+    return args
+        
+    

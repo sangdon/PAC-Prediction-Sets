@@ -3,7 +3,7 @@ import numpy as np
 
 import torch as tc
 import torch.nn as nn
-from torch import Tensor as T
+from torch import tensor as T
 
 from .util import *
 
@@ -12,7 +12,7 @@ from .util import *
 ##
 class PredSet(nn.Module):
     
-    def __init__(self, mdl, eps, delta, n):
+    def __init__(self, mdl, eps=0.0, delta=0.0, n=0):
         super().__init__()
         self.mdl = mdl
         self.T = nn.Parameter(T(0.0))
@@ -20,44 +20,41 @@ class PredSet(nn.Module):
         self.delta = nn.Parameter(T(delta), requires_grad=False)
         self.n = nn.Parameter(T(n), requires_grad=False)
 
-    
-
-    
+        
 class PredSetCls(PredSet):
     """
     T \in [0, \infty]
     """
-    def __init__(self, mdl, eps, delta, n):
+    def __init__(self, mdl, eps=0.0, delta=0.0, n=0):
         super().__init__(mdl, eps, delta, n)
 
         
-    def forward(self, x, y=None, e=1e-16):
+    def forward(self, x, y=None, e=0.0):
         with tc.no_grad():
             logp = self.mdl(x)['ph'].log()
             logp = logp + tc.rand_like(logp)*e # break the tie
             if y is not None:
-                logp = logp.gather(1, y.view(-1, 1)).squeeze(1)
-                        
-        return logp
+                logp = logp.gather(1, y.view(-1, 1)).squeeze(1)                        
+        return -logp
         
 
-    def set(self, x):
+    def set(self, x, y=None):
         with tc.no_grad():
-            logp = self.forward(x)
-            s = -logp <= self.T
+            nlogp = self.forward(x)
+            s = nlogp <= self.T
         return s
 
     
     def membership(self, x, y):
         with tc.no_grad():
-            s = self.set(x)
+            s = self.set(x, y)
             membership = s.gather(1, y.view(-1, 1)).squeeze(1)
         return membership
 
     
-    def size(self, x):
+    def size(self, x, y=None):
         with tc.no_grad():
-            sz = self.set(x).sum(1).float()
+            sz = self.set(x, y).sum(1).float()
         return sz
 
 
@@ -66,20 +63,20 @@ class PredSetReg(PredSet):
     T = - log(T'), where T' \in [0, \infty]
     T \in [-\infty, \infty]
     """
-    def __init__(self, mdl, eps, delta, n, var_min=1e-16):
+    def __init__(self, mdl, eps=0.0, delta=0.0, n=0, var_min=1e-16):
         super().__init__(mdl, eps, delta, n)
         self.var_min = var_min
 
 
-    def forward(self, x, y=None, e=1e-16):
+    def forward(self, x, y=None, e=0.0):
         with tc.no_grad():
             assert(y is not None)
             logph = self.mdl(x, y)['logph']
             logph = logph + tc.rand_like(logph)*e # break the tie                        
-        return logph
+        return -logph
 
     
-    def set(self, x):
+    def set(self, x, y=None):
         """
         assumption: Gaussian with a diagonal covariance matrix
         return: an ellipsoid for each example
@@ -93,7 +90,7 @@ class PredSetReg(PredSet):
         yh, yh_logvar = out['mu'], out['logvar']
         yh_var = tc.max(yh_logvar.exp(), tc.tensor(self.var_min, device=yh_logvar.device))
         yh, yh_logvar, yh_var = yh.reshape(yh.shape[0], -1), yh_logvar.reshape(yh.shape[0], -1), yh_var.reshape(yh.shape[0], -1)
-        
+
         ## find the largest superlevel set of Gaussian at T
         d = yh.size(1)
         const = 2*T - d*np.log(2.0*np.pi) - yh_logvar.sum(1, keepdim=True)
@@ -116,10 +113,9 @@ class PredSetReg(PredSet):
 
     
     def membership(self, x, y):
+        
         with tc.no_grad():
-            out = self.mdl.forward(x)
-        yh, yh_logvar = out['mu'], out['logvar']
-        css_membership = neg_log_prob(yh, yh_logvar, y) <= self.T
+            css_membership = self.forward(x, y) <= self.T
         return css_membership
 
     

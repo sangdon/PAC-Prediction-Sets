@@ -1,5 +1,7 @@
-# PAC Prediction Set
-## Classification
+# PAC Prediction Sets
+
+## Demo Example
 ```
-python3 main_cls.py --exp_name pred_set_imagenet --data.src ImageNet --data.tar ImageNet --estimate
+python3 main_cls_mnist.py --exp_name exp_mnist
 ```
+
