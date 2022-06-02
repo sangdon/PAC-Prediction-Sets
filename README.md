@@ -18,11 +18,11 @@ ln -s /home/sangdonp/data/coco2017/ data/coco
 
 To construct prediction sets and evaluation, execute the following:
 ```
-cal_main_det_coco.sh
+./cal_main_det_coco.sh
 ```
 
 Given constructed prediction sets, the following only evaluates them.
 ```
-run_main_det_coco.sh
+./run_main_det_coco.sh
 ```
 
