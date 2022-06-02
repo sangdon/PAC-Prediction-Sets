@@ -103,4 +103,12 @@ class ExampleNormalizer(nn.Module):
         x = TF.normalize(tensor=x, mean=self.mean, std=self.std)
         x = self.mdl(x, **kwargs)
         return x
+
     
+def box_inclusion(bb_small, bb_large):
+    ## bb_small is included in bb_large
+    ## assume xyxy format
+    if bb_large[0] <= bb_small[0] and bb_large[1] <= bb_small[1] and bb_small[2] <= bb_large[2] and bb_small[3] <= bb_large[3]:
+        return True
+    else:
+        return False

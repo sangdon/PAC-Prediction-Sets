@@ -133,18 +133,17 @@ class PredSetConstructor_BC(PredSetConstructor):
 
                 
     def train(self, ld, params):
+        ## init
         n = params.n
         eps = params.eps
         delta = params.delta
+        verbose = params.verbose
+        save = params.save
+                
         if self.name_postfix is None:
             self.name_postfix = ''    
         self.name_postfix = self.name_postfix + f'_n_{n}_eps_{eps:e}_delta_{delta:e}'
-        verbose = params.verbose
-        save = params.save
         
-        #n, eps, delta = self.mdl.n.item(), self.mdl.eps.item(), self.mdl.delta.item()
-        print(f"## construct a prediction set: n = {n}, eps = {eps:.2e}, delta = {delta:.2e}")
-
         ## load a model
         if not self.params.rerun and self._check_model(best=False):
             if self.params.load_final:
@@ -152,6 +151,10 @@ class PredSetConstructor_BC(PredSetConstructor):
             else:
                 self._load_model(best=True)
             return True
+
+        #n, eps, delta = self.mdl.n.item(), self.mdl.eps.item(), self.mdl.delta.item()
+        print(f"## construct a prediction set: n = {n}, eps = {eps:.2e}, delta = {delta:.2e}")
+
         
         ## compute permissive error
         if self.params.bnd_type == 'VC':
@@ -165,10 +168,13 @@ class PredSetConstructor_BC(PredSetConstructor):
             T_opt = tc.tensor(np.inf)
         else:
             T_opt = self._find_opt_T(ld, n, error_permissive)
-        self.mdl.T.data = T_opt
             
+        self.mdl.T.data = T_opt
+        self.mdl.n.data = tc.tensor(n)
+        self.mdl.eps.data = tc.tensor(eps)
+        self.mdl.delta.data = tc.tensor(delta)
         self.mdl.to(self.params.device)
-        print(f"error_permissive = {error_permissive}, T_opt = {T_opt}")
+        print(f"error_permissive = {error_permissive}, T_opt = {(-T_opt).exp()}")
 
         ## save
         if save:

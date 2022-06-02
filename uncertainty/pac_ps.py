@@ -22,7 +22,7 @@ class PredSetConstructor(BaseLearner):
     def test(self, ld, ld_name, verbose=False, save=True):
 
         ## compute set size and error
-        fn = os.path.join(self.params.snapshot_root, self.params.exp_name, 'stats_pred_set.pk')
+        fn = os.path.join(self.params.snapshot_root, self.params.exp_name, f'stats_pred_set_{self.name_postfix}.pk' if self.name_postfix else 'stats_pred_set.pk')
         if os.path.exists(fn) and not self.params.rerun:
             res = pickle.load(open(fn, 'rb'))
             error = res['error_test']

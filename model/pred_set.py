@@ -88,17 +88,23 @@ class PredSetReg(PredSet):
             ## label predictions
             out = self.mdl.forward(x)
         yh, yh_logvar = out['mu'], out['logvar']
-        yh_var = tc.max(yh_logvar.exp(), tc.tensor(self.var_min, device=yh_logvar.device))
-        yh, yh_logvar, yh_var = yh.reshape(yh.shape[0], -1), yh_logvar.reshape(yh.shape[0], -1), yh_var.reshape(yh.shape[0], -1)
 
-        ## find the largest superlevel set of Gaussian at T
-        d = yh.size(1)
-        const = 2*T - d*np.log(2.0*np.pi) - yh_logvar.sum(1, keepdim=True)
-        invalid = (const <= 0).squeeze() # when the superlevel set is empty
-        axis_vector = yh_var.mul(const).sqrt() # imagine a high-dimensional ellipse with the axis vector (axis_vector)
+        if yh.shape[0] == 0:
+            ## empty prediction
+            axis_vector = tc.zeros_like(yh)
+            invalid = tc.ones(yh.shape[0], device=yh.device, dtype=tc.bool)
+        else:
+            yh_var = tc.max(yh_logvar.exp(), tc.tensor(self.var_min, device=yh_logvar.device))
+            yh, yh_logvar, yh_var = yh.reshape(yh.shape[0], -1), yh_logvar.reshape(yh.shape[0], -1), yh_var.reshape(yh.shape[0], -1)
+
+            ## find the largest superlevel set of Gaussian at T
+            d = yh.size(1)
+            const = 2*T - d*np.log(2.0*np.pi) - yh_logvar.sum(1, keepdim=True)
+            invalid = (const <= 0).squeeze() # when the superlevel set is empty
+            axis_vector = yh_var.mul(const).sqrt() # imagine a high-dimensional ellipse with the axis vector (axis_vector)
 
         return yh, axis_vector, invalid
-        
+
 
     def set_boxapprox(self, x):
         center, axis_vector, invalid = self.set(x)
@@ -126,7 +132,7 @@ class PredSetReg(PredSet):
         return size
 
     
-    def size(self, x, size_type='volume'):
+    def size(self, x, y=None, size_type='volume'):
         if size_type == 'volume':
             return self.size_volume(x)
         else:
