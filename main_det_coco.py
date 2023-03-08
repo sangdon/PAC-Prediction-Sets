@@ -175,6 +175,7 @@ def main(args):
 
     mdl_det_ps = model.PredSetDet(mdl, mdl_prp_ps, mdl_obj_ps, mdl_loc_ps, args.data.target_labels)
 
+    results = []
     for images, targets in ds_tar.test:
         images = [img for img in learning.to_device(images, args.device)]
         with tc.no_grad():
@@ -201,6 +202,7 @@ def main(args):
             loc_pred_all, label_pred_all, score_pred_all = loc_pred_all.cpu(), label_pred_all.cpu(), score_pred_all.cpu()
 
             # result summary: all boxes are in (xmin, ymin, xmax, ymax) format
+            # target classes are "person" and "car"
             result = {
                 'image': image,
                 'bbox_ps': loc, # the postprocessed location prediction set: the tightest bounding box that contains all bounding boxes in the prediction set
@@ -209,37 +211,39 @@ def main(args):
                 'label_det': label_pred, # labels of the bounding boxes when score >= 0.5
                 'bbox_det_raw': loc_pred_all, # bounding boxes from the object detector
                 'score_det_raw': score_pred_all, # scores of the bounding boxes
-                'lalbel_det_raw': label_pred_all, # labels of the bounding boxes
+                'label_det_raw': label_pred_all, # labels of the bounding boxes
                 'bbox_gt': loc_gt,
                 'label_gt': label_gt,
             }
+            results.append(result)
             for k, v in result.items():
                 print(f'{k} =', v, v.shape)
             print()
 
-            # plot results and save
-            colors = ['green']*len(loc) + ['white']*len(loc_gt) + ['red']*len(loc_pred)
-            loc_plot = tc.cat([loc, loc_gt, loc_pred], 0)
-            label_plot = [' '+COCO_INSTANCE_CATEGORY_NAMES[l] for l in tc.cat([label, label_gt, label_pred])]
+        #     # plot results and save
+        #     colors = ['green']*len(loc) + ['white']*len(loc_gt) + ['red']*len(loc_pred)
+        #     loc_plot = tc.cat([loc, loc_gt, loc_pred], 0)
+        #     label_plot = [' '+COCO_INSTANCE_CATEGORY_NAMES[l] for l in tc.cat([label, label_gt, label_pred])]
 
-            image_boxes = tv.utils.draw_bounding_boxes(
-                (image*255).byte(),
-                loc_plot,
-                label_plot,
-                colors=colors,
-                width=3,
-            )
-            image_boxes = (image_boxes/255.0).float()
-            fn = os.path.join(args.snapshot_root, args.exp_name, 'figs', 'predset', f'{i}.png')
-            print(fn)
-            os.makedirs(os.path.dirname(fn), exist_ok=True)
-            tv.utils.save_image(image_boxes, fn)
-            i += 1
-        if i > n_vis:
-            break
+        #     image_boxes = tv.utils.draw_bounding_boxes(
+        #         (image*255).byte(),
+        #         loc_plot,
+        #         label_plot,
+        #         colors=colors,
+        #         width=3,
+        #     )
+        #     image_boxes = (image_boxes/255.0).float()
+        #     fn = os.path.join(args.snapshot_root, args.exp_name, 'figs', 'predset', f'{i}.png')
+        #     print(fn)
+        #     os.makedirs(os.path.dirname(fn), exist_ok=True)
+        #     tv.utils.save_image(image_boxes, fn)
+        #     i += 1
+        # if i > n_vis:
+        #     break
     
+    pickle.dump(results, open('results_coco_test.pk', 'wb'))
 
-    
+                
 def parse_args():
     ## init a parser
     parser = argparse.ArgumentParser(description='learning')
