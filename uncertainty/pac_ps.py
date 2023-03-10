@@ -17,13 +17,33 @@ class PredSetConstructor(BaseLearner):
         
     def train(self, ld):
         raise NotImplementedError
-            
+
+
+    ##TODO: implement load for save_compact
+    def _save_model(self, best=True):
+        if best:
+            model_fn = self.mdl_fn_best%('_'+self.name_postfix if self.name_postfix else '')
+        else:
+            model_fn = self.mdl_fn_final%('_'+self.name_postfix if self.name_postfix else '')
+        os.makedirs(os.path.dirname(model_fn), exist_ok=True)
+
+        if self.params.save_compact:
+            # remove mdl
+            state_dict = self.mdl.state_dict()
+            state_dict = {k: v for k, v in state_dict.items() if k[:len('mdl.')] != 'mdl.'}
+        else:
+            state_dict = self.mdl.state_dict()
+
+        tc.save(state_dict, model_fn)
+        return model_fn
+
         
     def test(self, ld, ld_name, verbose=False, save=True):
 
         ## compute set size and error
         fn = os.path.join(self.params.snapshot_root, self.params.exp_name, f'stats_pred_set_{self.name_postfix}.pk' if self.name_postfix else 'stats_pred_set.pk')
         if os.path.exists(fn) and not self.params.rerun:
+            print(f'load precomputed results at {fn}')
             res = pickle.load(open(fn, 'rb'))
             error = res['error_test']
             size = res['size_test']

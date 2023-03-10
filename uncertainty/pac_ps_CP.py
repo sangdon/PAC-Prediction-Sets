@@ -28,7 +28,7 @@ class PredSetConstructor_CP(PredSetConstructor):
         delta = params.delta
         if self.name_postfix is None:
             self.name_postfix = ''    
-        self.name_postfix = self.name_postfix + f'_n_{m}_eps_{eps:e}_delta_{delta:e}'
+        self.name_postfix = self.name_postfix + f'n_{m}_eps_{eps:e}_delta_{delta:e}'
         verbose = params.verbose
         #m, eps, delta = self.mdl.n.item(), self.mdl.eps.item(), self.mdl.delta.item()
         print(f"## construct a prediction set: m = {m}, eps = {eps:.2e}, delta = {delta:.2e}")
