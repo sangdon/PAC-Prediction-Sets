@@ -111,7 +111,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_ps.T_end', type=float, default=np.inf)
     parser.add_argument('--train_ps.eps_tol', type=float, default=1.25)
 
-    parser.add_argument('--train_ps.n', type=float, default=25000)
+    parser.add_argument('--train_ps.n', type=int, default=25000)
     parser.add_argument('--train_ps.eps', type=float, default=0.01)
     parser.add_argument('--train_ps.delta', type=float, default=1e-5)
             
